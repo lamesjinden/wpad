@@ -25,14 +25,14 @@
 
 (defn parse-wmctrl-window-dimensions-line [s]
   (when-let [match (re-matches wmctrl-lG-pattern s)]
-    (let [x (get match 2)
-          y (get match 3)
-          width (get match 4)
-          height (get match 5)]
-      {:x      (Integer/parseInt x)
-       :y      (Integer/parseInt y)
-       :width  (Integer/parseInt width)
-       :height (Integer/parseInt height)})))
+    (let [x (Integer/parseInt (get match 2))
+          y (Integer/parseInt (get match 3))
+          width (Integer/parseInt (get match 4))
+          height (Integer/parseInt (get match 5))]
+      {:x      x
+       :y      y
+       :width  width
+       :height height})))
 
 (defn parse-wmctrl-window-dimensions [ss active-window-id]
   (let [lines (str/split-lines ss)
@@ -40,7 +40,7 @@
                                       (filter (fn [s] (.startsWith (.toLowerCase s) (.toLowerCase active-window-id))))
                                       (first)
                                       (parse-wmctrl-window-dimensions-line))]
-    active-window-dimensions))
+    (into {:window-id active-window-id} active-window-dimensions)))
 
 (defn get-active-window-dimensions []
   (let [xprop-root-result (xprop-root!)
@@ -147,6 +147,16 @@
         frame-extents (parse-xprop-frame-extents xprop-id-out)]
     frame-extents))
 
+(defn get-centered-coordinates-by-rate [ratio screen-width workspace-height]
+  (let [width (int (* screen-width ratio))
+        height (int workspace-height)
+        x (int (/ (- screen-width width) 2))                ; todo use screen-x-offset
+        y 0]
+    {:x      x
+     :y      y
+     :width  width
+     :height height}))
+
 (defn get-centered-coordinates [{window-x :x}
                                 {monitor-descriptions :monitor-descriptions}
                                 {workspace-height :height}]
@@ -164,15 +174,9 @@
                                                      (if (<= acc window-x (+ acc width))
                                                        (reduced (assoc monitor :x-offset acc))
                                                        (+ acc width))))
-                                                 0))
-        new-x (+ (/ screen-width 4) screen-x-offset)
-        new-y 0
-        new-width (/ screen-width 2)
-        new-height workspace-height]
-    {:x      (int new-x)
-     :y      (int new-y)
-     :width  (int new-width)
-     :height (int new-height)}))
+                                                 0))]
+    {:primary-coordinates   (get-centered-coordinates-by-rate 0.5 screen-width workspace-height)
+     :secondary-coordinates (get-centered-coordinates-by-rate 0.67 screen-width workspace-height)}))
 
 (defn restore-active-window! []
   (as-> "wmctrl -r :ACTIVE: -b remove,maximized_vert,maximized_horz" $
@@ -180,7 +184,7 @@
         (apply sh $)))
 
 (defn center-active-window! [{:keys [x y width height]} {:keys [top-extent bottom-extent]}]
-  ; removed maximized flags, otherwise resizing does not work
+  ; remove maximized flags, otherwise resizing has no effect
   (restore-active-window!)
   (let [w width
         h (- height top-extent bottom-extent)]
@@ -190,11 +194,23 @@
 
 (defn -main []
   (let [active-window-dimensions (get-active-window-dimensions)
+        frame-dimensions (get-frame-dimensions)
         screens-dimensions (get-screens-dims)
         workspace-dimensions (get-workspace-area)
-        frame-dimensions (get-frame-dimensions)
-        centered-coordinates (get-centered-coordinates active-window-dimensions screens-dimensions workspace-dimensions)]
-    (center-active-window! centered-coordinates frame-dimensions)))
+        centered-coordinates (get-centered-coordinates active-window-dimensions screens-dimensions workspace-dimensions)
+        {:keys [primary-coordinates secondary-coordinates]} centered-coordinates]
+    ; hack in alternate size
+    ; * when current x is within twice the frame's x size
+    ;   and suggested width is equal
+    ; for background, see https://askubuntu.com/questions/576604/what-causes-the-deviation-in-the-wmctrl-window-move-command
+    ; * though, under xfce 4.12 and through x2go client, not everything mentioned applied
+    ;   * xdotool getactivewindow getwindoegeometry == xdotool getwindowgeometry $(xdotool selectwindow <click>)
+    (if (and (<= (Math/abs ^Integer (- (:x active-window-dimensions)
+                                       (:x primary-coordinates)))
+                 (* 2 (:left-extent frame-dimensions)))
+             (= (:width active-window-dimensions) (:width primary-coordinates)))
+      (center-active-window! secondary-coordinates frame-dimensions)
+      (center-active-window! primary-coordinates frame-dimensions))))
 
 (-main)
 
@@ -213,6 +229,8 @@
   ;     * provides virtual screen dimensions
   ;   * xdotool (not used)
   ;     * provides sizing and movement of active window
+  ;   *xwininfo
+  ;     * provides absolute positioning and measurements of specified window
 
   (restore-active-window!)
   (xprop-root!)
