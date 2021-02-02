@@ -4,11 +4,11 @@
 
 ## Requirements
 
-**wpad** scripts are intented to be run with Babashka. See [babashka](https://github.com/babashka/babashka).
+**wpad** scripts are intented to be run with [Babashka](https://github.com/babashka/babashka).
 
 The following binaries must be available to support script functionality:
 
-* ```xdotool```
+* ```wmctrl```
 * ```xrandr```
 * ```xprop```
 
