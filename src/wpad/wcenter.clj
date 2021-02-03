@@ -14,8 +14,8 @@
       padded)))
 
 (defn parse-xprop-active-window-id [ss]
-  (let [lines (str/split-lines ss)
-        active-window-id (->> lines
+  (let [active-window-id (->> ss
+                              (str/split-lines)
                               (filter (fn [s] (.startsWith s "_NET_ACTIVE_WINDOW(WINDOW)")))
                               (first)
                               (parse-xprop-active-window-line))]
@@ -35,19 +35,17 @@
        :height height})))
 
 (defn parse-wmctrl-window-dimensions [ss active-window-id]
-  (let [lines (str/split-lines ss)
-        active-window-dimensions (->> lines
+  (let [active-window-dimensions (->> ss
+                                      (str/split-lines)
                                       (filter (fn [s] (.startsWith (.toLowerCase s) (.toLowerCase active-window-id))))
                                       (first)
                                       (parse-wmctrl-window-dimensions-line))]
     (into {:window-id active-window-id} active-window-dimensions)))
 
 (defn get-active-window-dimensions []
-  (let [xprop-root-result (xprop-root!)
-        xprop-root-out (:out xprop-root-result)
+  (let [xprop-root-out (:out (xprop-root!))
+        wmctrl-out (:out (sh "wmctrl" "-lG"))
         active-window-id (parse-xprop-active-window-id xprop-root-out)
-        wmctrl-result (sh "wmctrl" "-lG")
-        wmctrl-out (:out wmctrl-result)
         active-window-dimensions (parse-wmctrl-window-dimensions wmctrl-out active-window-id)]
     active-window-dimensions))
 
@@ -85,8 +83,7 @@
      :monitor-descriptions monitor-descriptions}))
 
 (defn get-screens-dims []
-  (let [xrandr-result (sh "xrandr" "--listmonitors")
-        xrandr-out (:out xrandr-result)
+  (let [xrandr-out (:out (sh "xrandr" "--listmonitors"))
         parsed (parse-xrandr xrandr-out)]
     parsed))
 
@@ -104,16 +101,15 @@
        :height height})))
 
 (defn parse-xprop-workspace-area [ss]
-  (let [lines (str/split-lines ss)
-        workspace-area (->> lines
+  (let [workspace-area (->> ss
+                            (str/split-lines)
                             (filter (fn [s] (.startsWith s "_NET_WORKAREA(CARDINAL)")))
                             (first)
                             (parse-xprop-workarea-line))]
     workspace-area))
 
 (defn get-workspace-area []
-  (let [xprop-result (sh "xprop" "-root")
-        xprop-out (:out xprop-result)
+  (let [xprop-out (:out (sh "xprop" "-root"))
         workspace-area (parse-xprop-workspace-area xprop-out)]
     workspace-area))
 
@@ -131,19 +127,17 @@
        :bottom-extent bottom-extent})))
 
 (defn parse-xprop-frame-extents [ss]
-  (let [lines (str/split-lines ss)
-        frame-extents (->> lines
+  (let [frame-extents (->> ss
+                           (str/split-lines)
                            (filter (fn [s] (.startsWith s "_NET_FRAME_EXTENTS(CARDINAL)")))
                            (first)
                            (parse-xprop-frame-extents-line))]
     frame-extents))
 
 (defn get-frame-dimensions []
-  (let [xprop-root-result (sh "xprop" "-root")
-        xprop-root-out (:out xprop-root-result)
+  (let [xprop-root-out (:out (sh "xprop" "-root"))
         active-window-id (parse-xprop-active-window-id xprop-root-out)
-        xprop-id-result (sh "xprop" "-id" active-window-id)
-        xprop-id-out (:out xprop-id-result)
+        xprop-id-out (:out (sh "xprop" "-id" active-window-id))
         frame-extents (parse-xprop-frame-extents xprop-id-out)]
     frame-extents))
 
@@ -157,9 +151,9 @@
      :width  width
      :height height}))
 
-(defn get-centered-coordinates [{window-x :x}
-                                {monitor-descriptions :monitor-descriptions}
-                                {workspace-height :height}]
+(defn get-centering-options [{window-x :x}
+                             {monitor-descriptions :monitor-descriptions}
+                             {workspace-height :height}]
   ; find which screen the current window's x coordinate lies within.
   ; use found screen to provide screen-width.
   ; assume that iteration order of screens is correct.
@@ -174,9 +168,10 @@
                                                      (if (<= acc window-x (+ acc width))
                                                        (reduced (assoc monitor :x-offset acc))
                                                        (+ acc width))))
-                                                 0))]
-    {:primary-coordinates   (get-centered-coordinates-by-rate 0.5 screen-width workspace-height)
-     :secondary-coordinates (get-centered-coordinates-by-rate 0.67 screen-width workspace-height)}))
+                                                 0))
+        sizing-ratios [0.5 0.67 0.85]]
+    (->> sizing-ratios
+         (map #(get-centered-coordinates-by-rate % screen-width workspace-height)))))
 
 (defn restore-active-window! []
   (as-> "wmctrl -r :ACTIVE: -b remove,maximized_vert,maximized_horz" $
@@ -192,25 +187,31 @@
           (str/split $ #" ")
           (apply sh $))))
 
+(defn center-next! [{active-x :x active-width :width}
+                    {:keys [left-extent right-extent] :as frame-dimensions}
+                    centering-options]
+  ; hack in alternate size
+  ; * when current x is within twice the frame's x size
+  ;   and suggested width is equal
+  ; for background, see https://askubuntu.com/questions/576604/what-causes-the-deviation-in-the-wmctrl-window-move-command
+  ; * though, under xfce 4.12 and through x2go client, not everything mentioned applied
+  ;   * xdotool getactivewindow getwindoegeometry == xdotool getwindowgeometry $(xdotool selectwindow <click>)
+  (let [nearest (->> centering-options
+                     (partition 2 1)
+                     (some (fn [[{:keys [x _y width _height] :as _option} next]]
+                             (and (= width active-width)
+                                  (<= (Math/abs ^Integer (- x active-x)) (+ left-extent right-extent))
+                                  next))))
+        selected (or nearest (first centering-options))]
+    (center-active-window! selected frame-dimensions)))
+
 (defn -main []
   (let [active-window-dimensions (get-active-window-dimensions)
         frame-dimensions (get-frame-dimensions)
         screens-dimensions (get-screens-dims)
         workspace-dimensions (get-workspace-area)
-        centered-coordinates (get-centered-coordinates active-window-dimensions screens-dimensions workspace-dimensions)
-        {:keys [primary-coordinates secondary-coordinates]} centered-coordinates]
-    ; hack in alternate size
-    ; * when current x is within twice the frame's x size
-    ;   and suggested width is equal
-    ; for background, see https://askubuntu.com/questions/576604/what-causes-the-deviation-in-the-wmctrl-window-move-command
-    ; * though, under xfce 4.12 and through x2go client, not everything mentioned applied
-    ;   * xdotool getactivewindow getwindoegeometry == xdotool getwindowgeometry $(xdotool selectwindow <click>)
-    (if (and (<= (Math/abs ^Integer (- (:x active-window-dimensions)
-                                       (:x primary-coordinates)))
-                 (* 2 (:left-extent frame-dimensions)))
-             (= (:width active-window-dimensions) (:width primary-coordinates)))
-      (center-active-window! secondary-coordinates frame-dimensions)
-      (center-active-window! primary-coordinates frame-dimensions))))
+        centering-options (get-centering-options active-window-dimensions screens-dimensions workspace-dimensions)]
+    (center-next! active-window-dimensions frame-dimensions centering-options)))
 
 (-main)
 
@@ -229,7 +230,7 @@
   ;     * provides virtual screen dimensions
   ;   * xdotool (not used)
   ;     * provides sizing and movement of active window
-  ;   *xwininfo
+  ;   *xwininfo (not used)
   ;     * provides absolute positioning and measurements of specified window
 
   (restore-active-window!)
