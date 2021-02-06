@@ -146,14 +146,51 @@
         (str/split $ #" ")
         (apply sh $)))
 
-(defn move-active-window! [{:keys [x y width height]} {:keys [top-extent bottom-extent]}]
+(defn move-active-window! [{:keys [x y width height]} {:keys [left-extent right-extent top-extent bottom-extent]}]
   ; remove maximized flags, otherwise resizing has no effect
   (restore-active-window!)
-  (let [w width
+  (let [_ (prn left-extent right-extent)
+        ;w (- width left-extent right-extent)
+        w width
         h (- height top-extent bottom-extent)]
     (as-> (format "wmctrl -r :ACTIVE: -e 0,%s,%s,%s,%s" x y w h) $
           (str/split $ #" ")
           (apply sh $))))
+
+(defn get-containing-screen [{window-x :x}
+                             {monitor-descriptions :monitor-descriptions}]
+  ; find which screen the current window's x coordinate lies within.
+  ; use found screen to provide screen-width.
+  ; assume that iteration order of screens is correct.
+  ;   i.e. screen 0 begins at x = 0, screen 1 begins at x = 1 + <WIDTH-OF-SCREEN-0>
+  (->> monitor-descriptions
+       (reduce (fn [acc {width :width :as monitor}]
+                 ; special case - when window-x is negative
+                 (if (and (zero? acc)
+                          (neg? window-x))
+                   (reduced (assoc monitor :x-offset 0))
+                   (if (<= acc window-x (+ acc width))
+                     (reduced (assoc monitor :x-offset acc))
+                     (+ acc width))))
+               0)))
+
+(defn move-next! [{active-x :x active-width :width}
+                  {:keys [left-extent right-extent] :as frame-dimensions}
+                  centering-options]
+  ; hack in alternate size
+  ; * when current x is within twice the frame's x size
+  ;   and suggested width is equal
+  ; for background, see https://askubuntu.com/questions/576604/what-causes-the-deviation-in-the-wmctrl-window-move-command
+  ; * though, under xfce 4.12 and through x2go client, not everything mentioned applied
+  ;   * xdotool getactivewindow getwindoegeometry == xdotool getwindowgeometry $(xdotool selectwindow <click>)
+  (let [nearest (->> centering-options
+                     (partition 2 1)
+                     (some (fn [[{:keys [x _y width _height] :as _option} next]]
+                             (and (= width active-width)
+                                  (<= (Math/abs ^Integer (- x active-x)) (* 2 (+ left-extent right-extent)))
+                                  next))))
+        selected (or nearest (first centering-options))]
+    (move-active-window! selected frame-dimensions)))
 
 (comment
   ; required binaries:
