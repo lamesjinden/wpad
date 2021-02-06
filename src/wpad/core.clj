@@ -150,8 +150,7 @@
   ; remove maximized flags, otherwise resizing has no effect
   (restore-active-window!)
   (let [_ (prn left-extent right-extent)
-        ;w (- width left-extent right-extent)
-        w width
+        w (- width left-extent right-extent)
         h (- height top-extent bottom-extent)]
     (as-> (format "wmctrl -r :ACTIVE: -e 0,%s,%s,%s,%s" x y w h) $
           (str/split $ #" ")
@@ -186,7 +185,7 @@
   (let [nearest (->> centering-options
                      (partition 2 1)
                      (some (fn [[{:keys [x _y width _height] :as _option} next]]
-                             (and (= width active-width)
+                             (and (= (- width left-extent right-extent) active-width)
                                   (<= (Math/abs ^Integer (- x active-x)) (* 2 (+ left-extent right-extent)))
                                   next))))
         selected (or nearest (first centering-options))]
