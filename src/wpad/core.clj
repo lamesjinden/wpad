@@ -146,13 +146,19 @@
         (str/split $ #" ")
         (apply sh $)))
 
-(defn move-active-window! [{:keys [x y width height]} {:keys [left-extent right-extent top-extent bottom-extent]}]
+(defn -adjust-dimensions [{:keys [x y width height] :as _window-dimensions}
+                          {:keys [left-extent right-extent top-extent bottom-extent] :as _frame-dimensions}]
+  {:x      x
+   :y      y
+   :width  (- width left-extent right-extent)
+   :height (- height top-extent bottom-extent)})
+
+(defn move-active-window! [{:keys [x y] :as window-dimensions} frame-extents]
   ; remove maximized flags, otherwise resizing has no effect
   (restore-active-window!)
-  (let [_ (prn left-extent right-extent)
-        w (- width left-extent right-extent)
-        h (- height top-extent bottom-extent)]
-    (as-> (format "wmctrl -r :ACTIVE: -e 0,%s,%s,%s,%s" x y w h) $
+  (let [{adjusted-width  :width
+         adjusted-height :height} (-adjust-dimensions window-dimensions frame-extents)]
+    (as-> (format "wmctrl -r :ACTIVE: -e 0,%s,%s,%s,%s" x y adjusted-width adjusted-height) $
           (str/split $ #" ")
           (apply sh $))))
 
@@ -173,23 +179,37 @@
                      (+ acc width))))
                0)))
 
-(defn move-next! [{active-x :x active-width :width}
-                  {:keys [left-extent right-extent] :as frame-dimensions}
-                  centering-options]
-  ; hack in alternate size
-  ; * when current x is within twice the frame's x size
-  ;   and suggested width is equal
-  ; for background, see https://askubuntu.com/questions/576604/what-causes-the-deviation-in-the-wmctrl-window-move-command
-  ; * though, under xfce 4.12 and through x2go client, not everything mentioned applied
-  ;   * xdotool getactivewindow getwindoegeometry == xdotool getwindowgeometry $(xdotool selectwindow <click>)
+(defn -dimensions-match?
+  "determines if the two provided dimension descriptions are equal-ish.
+
+   a match is defined as follows:
+   * when width is equal
+   * and
+   * when delta x is within twice the frame's x size
+
+   for background, see https://askubuntu.com/questions/576604/what-causes-the-deviation-in-the-wmctrl-window-move-command
+   * though, under xfce 4.12 and through x2go client, not everything mentioned applied
+   * xdotool getactivewindow getwindoegeometry == xdotool getwindowgeometry $(xdotool selectwindow <click>)
+   "
+  [window-dimensions1 window-dimensions2 frame-dimensions]
+  (let [{width1 :width x1 :x} window-dimensions1
+        {width2 :width x2 :x} window-dimensions2
+        {:keys [left-extent right-extent]} frame-dimensions]
+    (and (= width1 width2)
+         (<= (Math/abs ^Integer (- x1 x2))
+             (* 2 (+ left-extent right-extent))))))
+
+(defn move-next! [active-window-dimensions frame-dimensions centering-options]
   (let [nearest (->> centering-options
                      (partition 2 1)
-                     (some (fn [[{:keys [x _y width _height] :as _option} next]]
-                             (and (= (- width left-extent right-extent) active-width)
-                                  (<= (Math/abs ^Integer (- x active-x)) (* 2 (+ left-extent right-extent)))
-                                  next))))
-        selected (or nearest (first centering-options))]
-    (move-active-window! selected frame-dimensions)))
+                     (some (fn [[option next-option]]
+                             (and (-dimensions-match?
+                                    active-window-dimensions
+                                    (-adjust-dimensions option frame-dimensions)
+                                    frame-dimensions)
+                                  next-option))))
+        next-dimensions (or nearest (first centering-options))]
+    (move-active-window! next-dimensions frame-dimensions)))
 
 (comment
   ; required binaries:
