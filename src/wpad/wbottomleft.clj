@@ -1,28 +1,28 @@
 (ns wpad.wbottomleft
   (:require [wpad.core :as w]))
 
-(defn get-placements-by-rate [ratio containing-screen workspace-height]
+(def sizing-ratios [0.25 0.33 0.5 0.67 0.75 0.85])
+
+; todo use screen-x-offset
+
+(defn get-placements-by-rate [ratio containing-screen workspace-dimensions]
   (let [screen-width (:width containing-screen)
         screen-height (:height containing-screen)
+        workspace-height (:height workspace-dimensions)
         y-delta (- screen-height workspace-height)
         width (int (* screen-width ratio))
         height (int (/ workspace-height 2))
-        x 0                                                 ; todo use screen-x-offset
+        x 0
         y (+ height y-delta)]
     {:x      x
      :y      y
      :width  width
      :height height}))
 
-(defn get-placement-options [active-window-dimensions
-                             screen-dimensions
-                             {workspace-height :height}]
-  (let [containing-screen (w/get-containing-screen
-                            active-window-dimensions
-                            screen-dimensions)
-        sizing-ratios [0.25 0.33 0.5 0.67 0.75 0.85]]
+(defn get-placement-options [active-window-dimensions screens-dimensions workspace-dimensions]
+  (let [containing-screen (w/get-containing-screen active-window-dimensions screens-dimensions)]
     (map
-      #(get-placements-by-rate % containing-screen workspace-height)
+      #(get-placements-by-rate % containing-screen workspace-dimensions)
       sizing-ratios)))
 
 (defn -main []
