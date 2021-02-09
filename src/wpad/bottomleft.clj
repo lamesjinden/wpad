@@ -1,4 +1,4 @@
-(ns wpad.wright
+(ns wpad.bottomleft
   (:require [wpad.core :as w]))
 
 (def sizing-ratios [0.25 0.33 0.5 0.67 0.75 0.85])
@@ -7,11 +7,13 @@
 
 (defn get-placements-by-rate [ratio containing-screen workspace-dimensions]
   (let [screen-width (:width containing-screen)
+        screen-height (:height containing-screen)
         workspace-height (:height workspace-dimensions)
+        y-delta (- screen-height workspace-height)
         width (int (* screen-width ratio))
-        height (int workspace-height)
-        x (- screen-width width)
-        y 0]
+        height (int (/ workspace-height 2))
+        x 0
+        y (+ height y-delta)]
     {:x      x
      :y      y
      :width  width

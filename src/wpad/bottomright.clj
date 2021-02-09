@@ -1,17 +1,19 @@
-(ns wpad.wcenter
+(ns wpad.bottomright
   (:require [wpad.core :as w]))
 
-(def sizing-ratios [0.25 0.33 0.5 0.67 0.85 1.0])
+(def sizing-ratios [0.25 0.33 0.5 0.67 0.75 0.85])
 
 ; todo use screen-x-offset
 
 (defn get-placements-by-rate [ratio containing-screen workspace-dimensions]
   (let [screen-width (:width containing-screen)
+        screen-height (:height containing-screen)
         workspace-height (:height workspace-dimensions)
+        y-delta (- screen-height workspace-height)
         width (int (* screen-width ratio))
-        height (int workspace-height)
-        x (int (/ (- screen-width width) 2))
-        y 0]
+        height (int (/ workspace-height 2))
+        x (- screen-width width)
+        y (+ height y-delta)]
     {:x      x
      :y      y
      :width  width
