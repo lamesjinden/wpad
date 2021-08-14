@@ -5,7 +5,7 @@
 (def logfile-path "/home/james/bin/wpad/log.txt")
 
 (defn log [s]
-  ;(spit logfile-path (str s "\n") :append true)
+  ; (spit logfile-path (str s "\n") :append true)
   )
 
 (def xprop-root! (fn [] (sh "xprop" "-root")))
@@ -139,7 +139,6 @@
          :top-extent    top-extent
          :bottom-extent bottom-extent}))))
 
-; todo if _gtk_frame_extents is missing, try _net_frame_extents
 (defn parse-xprop-frame-extents [ss]
   (->> ss
        (str/split-lines)
@@ -185,16 +184,83 @@
                      (+ acc width))))
                0)))
 
-(defn move-next! [active-window-dimensions frame-dimensions placement-options]
-  (let [nearest (->> placement-options
+(defn parse-normal-hint-value [hint-value]
+  ; examples:
+  ;   program specified minimum size: 387 by 145
+  ;   program specified resize increment: 6 by 13
+  ;   program specified base size: 66 by 101
+
+  (let [split (str/split hint-value #" by ")
+        width (Integer/parseInt (str/trim (first split)))
+        height (Integer/parseInt (str/trim (second split)))]
+    {:hint-width  width
+     :hint-height height}))
+
+(def hint-minimum-size-token "program specified minimum size")
+(def hint-resize-increment-token "program specified resize increment")
+(def hint-base-size-token "program specified base size")
+
+(defn parse-xprop-normal-hints [ss]
+  (->> ss
+       (str/split-lines)
+       (map #(str/split % #":"))
+       (filter #(= 2 (count %)))
+       (reduce
+         (fn [acc [left right]]
+           (let [trim-left (str/trim left)
+                 trim-right (str/trim right)]
+             (cond
+               (= trim-left hint-minimum-size-token) (assoc acc :minimum-size (parse-normal-hint-value trim-right))
+               (= trim-left hint-resize-increment-token) (assoc acc :resize-increment (parse-normal-hint-value trim-right))
+               (= trim-left hint-base-size-token) (assoc acc :width (parse-normal-hint-value trim-right))
+               :else acc)))
+         {})))
+
+(defn get-active-window-hints []
+  (let [xprop-root-out (:out (xprop-root!))
+        active-window-id (parse-xprop-active-window-id xprop-root-out)
+        xprop-id-out (:out (sh "xprop" "-id" active-window-id))
+        normal-hints (parse-xprop-normal-hints xprop-id-out)]
+    normal-hints))
+
+(defn get-adjusted-placement-option [active-window-hints]
+  (let [hint-width (get-in active-window-hints [:resize-increment :hint-width])
+        active-window-dimensions (get-active-window-dimensions)
+        next-width (+ (:width active-window-dimensions) hint-width)
+        next-window-dimensions (assoc active-window-dimensions :width next-width)]
+    next-window-dimensions))
+
+(defn move-next! [active-window-dimensions frame-dimensions placement-options workspace-dimensions]
+  (let [active-window-width (:width active-window-dimensions)
+        left-extent (:left-extent frame-dimensions)
+        right-extent (:right-extent frame-dimensions)
+        workspace-width (:width workspace-dimensions)
+        total-width (+ workspace-width left-extent right-extent)
+        nearest (->> placement-options
                      (partition 2 1)
                      (some (fn [[option next-option]]
                              (and
-                               (>= (:width active-window-dimensions) (:width option))
-                               (< (:width active-window-dimensions) (:width next-option))
+                               (>= active-window-width (:width option))
+                               (< active-window-width (:width next-option))
                                next-option))))
         next-dimensions (or nearest (first placement-options))]
-    (move-active-window! next-dimensions frame-dimensions)))
+
+    (move-active-window! next-dimensions frame-dimensions)
+
+    ; verify resize - applies to Terminal windows, Emacs (unless pixelwise resize is enabled)
+    (let [current-dimensions (get-active-window-dimensions)
+          current-width (:width current-dimensions)
+          active-window-hints (get-active-window-hints)
+          hint-width (get-in active-window-hints [:resize-increment :hint-width])
+          width-delta (Math/abs ^Integer (- active-window-width current-width))]
+      (when width-delta
+        (let [adjusted-placement-option (if (and (< width-delta hint-width)
+                                                 (< total-width (+ current-width hint-width)))
+                                          ; small delta indicates this attempt already happened
+                                          ; exceeding total width indicates to go back to first placement option
+                                          (first placement-options)
+                                          (get-adjusted-placement-option active-window-hints))]
+          (move-active-window! adjusted-placement-option frame-dimensions))))))
 
 (comment
   ; required binaries:

@@ -1,7 +1,7 @@
 (ns wpad.center
   (:require [wpad.core :as w]))
 
-(def sizing-ratios [0.25 0.5 1.0])
+(def sizing-ratios [0.25 0.5 0.75 1.0])
 
 (defn get-placements-by-rate [ratio containing-screen workspace-dimensions {:keys [left-extent right-extent top-extent bottom-extent] :as _frame-dimensions}]
   (let [screen-width (:width containing-screen)
@@ -36,7 +36,7 @@
                               screens-dimensions
                               workspace-dimensions
                               frame-dimensions)]
-      (w/move-next! active-window-dimensions frame-dimensions placement-options))
+      (w/move-next! active-window-dimensions frame-dimensions placement-options workspace-dimensions))
     (catch Exception e
       (w/log e))))
 

@@ -36,7 +36,7 @@
                               screens-dimensions
                               workspace-dimensions
                               frame-dimensions)]
-      (w/move-next! active-window-dimensions frame-dimensions placement-options))
+      (w/move-next! active-window-dimensions frame-dimensions placement-options workspace-dimensions))
     (catch Exception e
       (w/log e))))
 
