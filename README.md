@@ -11,4 +11,4 @@ The following binaries must be available to support script functionality:
 * ```wmctrl```
 * ```xrandr```
 * ```xprop```
-
+* ```xwininfo```
