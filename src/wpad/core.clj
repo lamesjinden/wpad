@@ -5,7 +5,7 @@
 (def logfile-path "/home/james/bin/wpad/log.txt")
 
 (defn log [s]
-  ; (spit logfile-path (str s "\n") :append true)
+  ;(spit logfile-path (str s "\n") :append true)
   )
 
 (def xprop-root! (fn [] (sh "xprop" "-root")))
@@ -247,7 +247,7 @@
 
     (move-active-window! next-dimensions frame-dimensions)
 
-    ; verify resize - applies to Terminal windows, Emacs (unless pixelwise resize is enabled)
+    ; verify resize - applies to Terminal windows, Emacs (unless pixel-wise resize is enabled)
     (let [current-dimensions (get-active-window-dimensions)
           current-width (:width current-dimensions)
           active-window-hints (get-active-window-hints)
@@ -266,19 +266,20 @@
   ; required binaries:
   ;   * xprop
   ;     * provides dimensions of the virtual workspace - i.e. top panel height
-  ;     * provides dimensions of active windoe frame extents i.e. thickness of title bar
+  ;     * provides dimensions of active window frame extents i.e. thickness of title bar
   ;   * xrandr
   ;     * provides physical screen dimensions
   ;   * wmctrl
+  ;     * used to un-maximize
+  ;   * xdotool
   ;     * provides sizing and movement of active window
+  ;   * xwininfo
+  ;     * provides absolute positioning and measurements of specified window
+  ;     * used to get active window geometry
   ;
   ; optional binaries:
   ;   * xdpyinfo (not used)
   ;     * provides virtual screen dimensions
-  ;   * xdotool (not used)
-  ;     * provides sizing and movement of active window
-  ;   *xwininfo (not used)
-  ;     * provides absolute positioning and measurements of specified window
 
   (restore-active-window!)
   (xprop-root!)
