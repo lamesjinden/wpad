@@ -223,19 +223,26 @@
         normal-hints (parse-xprop-normal-hints xprop-id-out)]
     normal-hints))
 
-(defn get-adjusted-placement-option [active-window-hints]
-  (let [hint-width (get-in active-window-hints [:resize-increment :hint-width])
-        active-window-dimensions (get-active-window-dimensions)
-        next-width (+ (:width active-window-dimensions) hint-width)
-        next-window-dimensions (assoc active-window-dimensions :width next-width)]
+(defn get-adjusted-placement-option [{active-window-width  :width
+                                      active-window-height :height
+                                      :as                  active-window-dimensions}
+                                     {:keys [hint-width hint-height] :as _resize-increments}]
+  (let [next-width (+ active-window-width hint-width)
+        next-height (+ active-window-height hint-height)
+        next-window-dimensions (-> active-window-dimensions
+                                   (assoc :width next-width :height next-height)
+                                   (assoc :height next-height))]
     next-window-dimensions))
 
-(defn move-next! [active-window-dimensions frame-dimensions placement-options workspace-dimensions]
-  (let [active-window-width (:width active-window-dimensions)
-        left-extent (:left-extent frame-dimensions)
-        right-extent (:right-extent frame-dimensions)
-        workspace-width (:width workspace-dimensions)
-        total-width (+ workspace-width left-extent right-extent)
+(defn move-next! [{active-window-width :width
+                   :as                 _active-window-dimensions}
+                  {left-extent  :left-extent
+                   right-extent :right-extent
+                   :as          frame-dimensions}
+                  placement-options
+                  {workspace-width :width
+                   :as             _workspace-dimensions}]
+  (let [total-width (+ workspace-width left-extent right-extent)
         nearest (->> placement-options
                      (partition 2 1)
                      (some (fn [[option next-option]]
@@ -248,18 +255,19 @@
     (move-active-window! next-dimensions frame-dimensions)
 
     ; verify resize - applies to Terminal windows, Emacs (unless pixel-wise resize is enabled)
-    (let [current-dimensions (get-active-window-dimensions)
-          current-width (:width current-dimensions)
-          active-window-hints (get-active-window-hints)
-          hint-width (get-in active-window-hints [:resize-increment :hint-width])
+    (let [{current-width :width
+           :as           resized-window-dimensions} (get-active-window-dimensions)
+          {{hint-width :hint-width
+            :as        resize-increments} :resize-increment} (get-active-window-hints)
           width-delta (Math/abs ^Integer (- active-window-width current-width))]
       (when width-delta
         (let [adjusted-placement-option (if (and (< width-delta hint-width)
                                                  (< total-width (+ current-width hint-width)))
+                                          ; todo consider height
                                           ; small delta indicates this attempt already happened
                                           ; exceeding total width indicates to go back to first placement option
                                           (first placement-options)
-                                          (get-adjusted-placement-option active-window-hints))]
+                                          (get-adjusted-placement-option resized-window-dimensions resize-increments))]
           (move-active-window! adjusted-placement-option frame-dimensions))))))
 
 (comment
@@ -283,6 +291,6 @@
 
   (restore-active-window!)
   (xprop-root!)
-  (parse-wmctrl-window-dimensions-line "0x01400b81  1 74   127  577  717  dev Terminal - james@dev: ~")
+  ; (parse-wmctrl-window-dimensions-line "0x01400b81  1 74   127  577  717  dev Terminal - james@dev: ~")
   (get-active-window-dimensions)
   )
