@@ -5,7 +5,7 @@
 (def logfile-path "/home/james/bin/wpad/log.txt")
 
 (defn log [s]
-  ;(spit logfile-path (str s "\n") :append true)
+  (spit logfile-path (str s "\n") :append true)
   )
 
 (def xprop-root! (fn [] (sh "xprop" "-root")))
@@ -234,15 +234,39 @@
                                    (assoc :height next-height))]
     next-window-dimensions))
 
+(defn get-fitted-dimensions [{width  :width
+                              height :height
+                              :as    dimensions}
+                             {:keys [hint-width hint-height] :as _resize-increments}
+                             {left-extent  :left-extent
+                              right-extent :right-extent
+                              :as          _frame-dimensions}
+                             {workspace-width :width
+                              :as             _workspace-dimensions}]
+
+  (let [mod-width (mod width hint-width)
+        next-width (+ (- width mod-width) hint-width)
+        ; resize down if adjusted size exceeds screen dimensions
+        total-width (+ workspace-width left-extent right-extent)
+        next-width (if (> next-width total-width) (- next-width hint-width) next-width)
+        mod-height (mod height hint-height)
+        next-height (+ (- height mod-height) hint-height)
+        next-dimensions (-> dimensions
+                            (assoc :width next-width)
+                            (assoc :height next-height))]
+    next-dimensions))
+
 (defn move-next! [{active-window-width :width
                    :as                 _active-window-dimensions}
-                  {left-extent  :left-extent
-                   right-extent :right-extent
-                   :as          frame-dimensions}
+                  frame-dimensions
                   placement-options
-                  {workspace-width :width
-                   :as             _workspace-dimensions}]
-  (let [total-width (+ workspace-width left-extent right-extent)
+                  workspace-dimensions
+                  {resize-increments :resize-increment
+                   :as _active-window-hints}]
+  (let [placement-options (if resize-increments
+                            (->> placement-options
+                                 (map #(get-fitted-dimensions % resize-increments frame-dimensions workspace-dimensions)))
+                            placement-options)
         nearest (->> placement-options
                      (partition 2 1)
                      (some (fn [[option next-option]]
@@ -251,24 +275,7 @@
                                (< active-window-width (:width next-option))
                                next-option))))
         next-dimensions (or nearest (first placement-options))]
-
-    (move-active-window! next-dimensions frame-dimensions)
-
-    ; verify resize - applies to Terminal windows, Emacs (unless pixel-wise resize is enabled)
-    (let [{current-width :width
-           :as           resized-window-dimensions} (get-active-window-dimensions)
-          {{hint-width :hint-width
-            :as        resize-increments} :resize-increment} (get-active-window-hints)
-          width-delta (Math/abs ^Integer (- active-window-width current-width))]
-      (when width-delta
-        (let [adjusted-placement-option (if (and (< width-delta hint-width)
-                                                 (< total-width (+ current-width hint-width)))
-                                          ; todo consider height
-                                          ; small delta indicates this attempt already happened
-                                          ; exceeding total width indicates to go back to first placement option
-                                          (first placement-options)
-                                          (get-adjusted-placement-option resized-window-dimensions resize-increments))]
-          (move-active-window! adjusted-placement-option frame-dimensions))))))
+    (move-active-window! next-dimensions frame-dimensions)))
 
 (comment
   ; required binaries:

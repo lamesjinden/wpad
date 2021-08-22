@@ -46,8 +46,9 @@
                               active-window-dimensions
                               screens-dimensions
                               workspace-dimensions
-                              frame-dimensions)]
-      (w/move-next! active-window-dimensions frame-dimensions placement-options workspace-dimensions))
+                              frame-dimensions)
+          active-window-hints (w/get-active-window-hints)]
+      (w/move-next! active-window-dimensions frame-dimensions placement-options workspace-dimensions active-window-hints))
     (catch Exception e
       (w/log e))))
 
