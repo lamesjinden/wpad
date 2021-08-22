@@ -8,7 +8,7 @@
   (spit logfile-path (str s "\n") :append true)
   )
 
-(def xprop-root! (fn [] (sh "xprop" "-root")))
+(def get-xprop-root (fn [] (sh "xprop" "-root")))
 
 (def xprop-active-window-pattern #"_NET_ACTIVE_WINDOW\(WINDOW\): window id # 0x([a-f0-9]+).*")
 
@@ -25,8 +25,6 @@
                               (first)
                               (parse-xprop-active-window-line))]
     active-window-id))
-
-; region replace get-active-window-dimensions
 
 (def xwininfo-upper-left-x-token "Absolute upper-left X")
 (def xwininfo-upper-left-y-token "Absolute upper-left Y")
@@ -49,15 +47,6 @@
                (= trim-left xwininfo-height-token) (assoc acc :height (Integer/parseInt trim-right))
                :else acc)))
          {})))
-
-(defn get-active-window-dimensions []
-  (let [xprop-root-out (:out (xprop-root!))
-        active-window-id (parse-xprop-active-window-id xprop-root-out)
-        xwininfo-out (:out (sh "xwininfo" "-id" active-window-id))
-        active-window-dimensions (parse-xwininfo-window-dimensions xwininfo-out)]
-    (assoc active-window-dimensions :window-id active-window-id)))
-
-; endregion
 
 (def xrandr-monitors-line-pattern #"^Monitors:\s+(\d+).*")
 
@@ -92,11 +81,6 @@
     {:monitors-count       monitors-count
      :monitor-descriptions monitor-descriptions}))
 
-(defn get-screens-dims []
-  (let [xrandr-out (:out (sh "xrandr" "--listmonitors"))
-        parsed (parse-xrandr xrandr-out)]
-    parsed))
-
 (def xprop-workspace-pattern #"_NET_WORKAREA\(CARDINAL\)\s+=\s+(\d+), (\d+), (\d+), (\d+),?.*")
 
 (defn parse-xprop-workarea-line [s]
@@ -116,11 +100,6 @@
                             (filter (fn [s] (.startsWith s "_NET_WORKAREA(CARDINAL)")))
                             (first)
                             (parse-xprop-workarea-line))]
-    workspace-area))
-
-(defn get-workspace-area []
-  (let [xprop-out (:out (sh "xprop" "-root"))
-        workspace-area (parse-xprop-workspace-area xprop-out)]
     workspace-area))
 
 ;_GTK_FRAME_EXTENTS(CARDINAL) = 26, 26, 23, 29
@@ -146,13 +125,6 @@
                     (.startsWith % "_NET_FRAME_EXTENTS(CARDINAL)")))
        (first)
        (parse-xprop-frame-extents-line)))
-
-(defn get-frame-dimensions []
-  (let [xprop-root-out (:out (sh "xprop" "-root"))
-        active-window-id (parse-xprop-active-window-id xprop-root-out)
-        xprop-id-out (:out (sh "xprop" "-id" active-window-id))
-        frame-extents (parse-xprop-frame-extents xprop-id-out)]
-    frame-extents))
 
 (defn restore-active-window! []
   (as-> "wmctrl -r :ACTIVE: -b remove,maximized_vert,maximized_horz" $
@@ -216,65 +188,67 @@
                :else acc)))
          {})))
 
-(defn get-active-window-hints []
-  (let [xprop-root-out (:out (xprop-root!))
+(defn get-environment []
+  (let [xprop-root-out (:out (get-xprop-root))
         active-window-id (parse-xprop-active-window-id xprop-root-out)
+        xwininfo-out (:out (sh "xwininfo" "-id" active-window-id))
+        active-window-dimensions (parse-xwininfo-window-dimensions xwininfo-out)
         xprop-id-out (:out (sh "xprop" "-id" active-window-id))
+        frame-extents (parse-xprop-frame-extents xprop-id-out)
+        xrandr-out (:out (sh "xrandr" "--listmonitors"))
+        monitors (parse-xrandr xrandr-out)
+        workspace-area (parse-xprop-workspace-area xprop-root-out)
         normal-hints (parse-xprop-normal-hints xprop-id-out)]
-    normal-hints))
+    {:window    {:id            active-window-id
+                 :dimensions    active-window-dimensions
+                 :frame-extents frame-extents
+                 :hints         normal-hints}
+     :workspace workspace-area
+     :monitors  monitors}))
 
-(defn get-adjusted-placement-option [{active-window-width  :width
-                                      active-window-height :height
-                                      :as                  active-window-dimensions}
-                                     {:keys [hint-width hint-height] :as _resize-increments}]
-  (let [next-width (+ active-window-width hint-width)
-        next-height (+ active-window-height hint-height)
-        next-window-dimensions (-> active-window-dimensions
-                                   (assoc :width next-width :height next-height)
-                                   (assoc :height next-height))]
-    next-window-dimensions))
-
-(defn get-fitted-dimensions [{width  :width
-                              height :height
-                              :as    dimensions}
-                             {:keys [hint-width hint-height] :as _resize-increments}
-                             {left-extent  :left-extent
-                              right-extent :right-extent
-                              :as          _frame-dimensions}
-                             {workspace-width :width
-                              :as             _workspace-dimensions}]
-
-  (let [mod-width (mod width hint-width)
-        next-width (+ (- width mod-width) hint-width)
-        ; resize down if adjusted size exceeds screen dimensions
-        total-width (+ workspace-width left-extent right-extent)
-        next-width (if (> next-width total-width) (- next-width hint-width) next-width)
-        mod-height (mod height hint-height)
-        next-height (+ (- height mod-height) hint-height)
+(defn resize-dimensions [{width  :width
+                          height :height
+                          :as    dimensions}
+                         {:keys [hint-width hint-height] :as _resize-increments}
+                         {left-extent  :left-extent
+                          right-extent :right-extent
+                          :as          _frame-dimensions}
+                         {workspace-width :width
+                          :as             _workspace-dimensions}]
+  (let [total-width (+ workspace-width left-extent right-extent)
+        next-width (as-> (+ (- width (mod width hint-width)) hint-width) $
+                         ; resize down if adjusted size exceeds screen dimensions
+                         (if (> $ total-width)
+                           (- $ hint-width)
+                           $))
+        next-height (+ (- height (mod height hint-height)) hint-height)
         next-dimensions (-> dimensions
                             (assoc :width next-width)
                             (assoc :height next-height))]
     next-dimensions))
 
-(defn move-next! [{active-window-width :width
-                   :as                 _active-window-dimensions}
-                  frame-dimensions
-                  placement-options
-                  workspace-dimensions
-                  {resize-increments :resize-increment
-                   :as _active-window-hints}]
-  (let [placement-options (if resize-increments
-                            (->> placement-options
-                                 (map #(get-fitted-dimensions % resize-increments frame-dimensions workspace-dimensions)))
-                            placement-options)
-        nearest (->> placement-options
+(defn move-next!
+  [{{{active-window-width :width
+      :as                 _active-window-dimensions} :dimensions
+     frame-dimensions                                :frame-extents
+     {resize-increments :resize-increment
+      :as               _active-window-hints}        :hints} :window
+    workspace-dimensions                                     :workspace
+    :as                                                      _environment}
+   placement-options]
+  (let [resized-placements (if resize-increments
+                             (->> placement-options
+                                  (map #(resize-dimensions % resize-increments frame-dimensions workspace-dimensions)))
+                             placement-options)
+        nearest (->> resized-placements
                      (partition 2 1)
-                     (some (fn [[option next-option]]
+                     (some (fn [[{option-width :width :as _option}
+                                 {next-width :width :as next-option}]]
                              (and
-                               (>= active-window-width (:width option))
-                               (< active-window-width (:width next-option))
+                               (>= active-window-width option-width)
+                               (< active-window-width next-width)
                                next-option))))
-        next-dimensions (or nearest (first placement-options))]
+        next-dimensions (or nearest (first resized-placements))]
     (move-active-window! next-dimensions frame-dimensions)))
 
 (comment
@@ -295,9 +269,4 @@
   ; optional binaries:
   ;   * xdpyinfo (not used)
   ;     * provides virtual screen dimensions
-
-  (restore-active-window!)
-  (xprop-root!)
-  ; (parse-wmctrl-window-dimensions-line "0x01400b81  1 74   127  577  717  dev Terminal - james@dev: ~")
-  (get-active-window-dimensions)
   )
