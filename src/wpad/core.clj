@@ -5,7 +5,7 @@
 (def logfile-path "/home/james/bin/wpad/log.txt")
 
 (defn log [s]
-  (spit logfile-path (str s "\n") :append true)
+  ; (spit logfile-path (str s "\n") :append true)
   )
 
 (def get-xprop-root (fn [] (sh "xprop" "-root")))
