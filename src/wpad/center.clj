@@ -1,7 +1,7 @@
 (ns wpad.center
   (:require [wpad.core :as w]))
 
-(def sizing-ratios [0.25 0.33 0.5 0.67 0.85 1.0])
+(def sizing-ratios [0.5 0.67 0.85 1.0 0.25 0.33])
 
 ; todo use screen-x-offset
 
