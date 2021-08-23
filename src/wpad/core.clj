@@ -118,13 +118,20 @@
          :top-extent    top-extent
          :bottom-extent bottom-extent}))))
 
+(def frame-extents-gtk-prefix "_GTK_FRAME_EXTENTS(CARDINAL)")
+(def frame-extents-net-prefix "_NET_FRAME_EXTENTS(CARDINAL)")
+
 (defn parse-xprop-frame-extents [ss]
-  (->> ss
-       (str/split-lines)
-       (filter #(or (.startsWith % "_GTK_FRAME_EXTENTS(CARDINAL)")
-                    (.startsWith % "_NET_FRAME_EXTENTS(CARDINAL)")))
-       (first)
-       (parse-xprop-frame-extents-line)))
+  (let [frame-extents-line (->> ss
+                                (str/split-lines)
+                                (filter #(or (.startsWith % frame-extents-gtk-prefix)
+                                             (.startsWith % frame-extents-net-prefix)))
+                                (first))
+        frame-extents (parse-xprop-frame-extents-line frame-extents-line)
+        extents-type (if (.startsWith frame-extents-line frame-extents-gtk-prefix)
+                       :gtk
+                       :net)]
+    (assoc frame-extents :extents-type extents-type)))
 
 (defn restore-active-window! []
   (as-> "wmctrl -r :ACTIVE: -b remove,maximized_vert,maximized_horz" $

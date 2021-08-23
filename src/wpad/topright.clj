@@ -9,13 +9,16 @@
                               {{workspace-width  :width
                                 workspace-height :height
                                 :as              _workspace-dimensions}   :workspace
-                               {{:keys [left-extent right-extent top-extent bottom-extent]
+                               {{:keys [left-extent right-extent top-extent bottom-extent extents-type]
                                  :as   _frame-dimensions} :frame-extents} :window
                                :as                                        _environment}]
   (let [horizontal-extents (+ left-extent right-extent)
         vertical-extents (+ top-extent bottom-extent)
         desired-width (int (* ratio workspace-width))
-        desired-height (int (/ workspace-height 2))
+        desired-height (as-> (int (/ workspace-height 2)) $
+                             (if (= extents-type :net)
+                               (- $ (* 2 top-extent))
+                               $))
         width (+ desired-width horizontal-extents)
         height (+ desired-height vertical-extents)
         x (- screen-width desired-width)
