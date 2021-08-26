@@ -5,7 +5,7 @@
 (def logfile-path "/home/james/bin/wpad/log.txt")
 
 (defn log [s]
-  ; (spit logfile-path (str s "\n") :append true)
+  ;(spit logfile-path (str s "\n") :append true)
   )
 
 (def get-xprop-root (fn [] (sh "xprop" "-root")))
@@ -127,10 +127,16 @@
                                 (filter #(or (.startsWith % frame-extents-gtk-prefix)
                                              (.startsWith % frame-extents-net-prefix)))
                                 (first))
-        frame-extents (parse-xprop-frame-extents-line frame-extents-line)
-        extents-type (if (.startsWith frame-extents-line frame-extents-gtk-prefix)
-                       :gtk
-                       :net)]
+        frame-extents (or (parse-xprop-frame-extents-line frame-extents-line)
+                          {:left-extent   0
+                           :right-extent  0
+                           :top-extent    0
+                           :bottom-extent 0})
+        extents-type (cond
+                       (nil? frame-extents-line) :none
+                       (.startsWith frame-extents-line frame-extents-gtk-prefix) :gtk
+                       (.startsWith frame-extents-line frame-extents-net-prefix) :net
+                       :else :none)]
     (assoc frame-extents :extents-type extents-type)))
 
 (defn restore-active-window! []

@@ -3,17 +3,18 @@
 
 (def sizing-ratios [0.25 0.5 0.75 1.0])
 
-(defn get-placements-by-rate [ratio
-                              {screen-height :height
-                               screen-width  :width
-                               :as           _containing-screen}
-                              {{workspace-width  :width
-                                workspace-height :height
-                                workspace-x      :x
-                                :as              _workspace-dimensions}   :workspace
-                               {{:keys [left-extent right-extent top-extent bottom-extent]
-                                 :as   _frame-dimensions} :frame-extents} :window
-                               :as                                        _environment}]
+(defn get-placements-by-rate
+  [ratio
+   {screen-height :height
+    screen-width  :width
+    :as           _containing-screen}
+   {{workspace-width  :width
+     workspace-height :height
+     workspace-x      :x
+     :as              _workspace-dimensions}   :workspace
+    {{:keys [left-extent right-extent top-extent bottom-extent]
+      :as   _frame-dimensions} :frame-extents} :window
+    :as                                        _environment}]
   (let [horizontal-extents (+ left-extent right-extent)
         vertical-extents (+ top-extent bottom-extent)
         desired-width (int (* ratio workspace-width))

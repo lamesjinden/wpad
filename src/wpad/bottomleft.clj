@@ -18,8 +18,8 @@
         desired-width (int (* ratio workspace-width))
         desired-height (as-> (int (/ workspace-height 2)) $
                              (if (= extents-type :net)
-                                (- $ (* 2 top-extent))
-                                $))
+                               (- $ (* 2 top-extent))
+                               $))
         width (+ desired-width horizontal-extents)
         height (+ desired-height vertical-extents)
         x 0
