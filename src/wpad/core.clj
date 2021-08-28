@@ -122,11 +122,12 @@
 (def frame-extents-net-prefix "_NET_FRAME_EXTENTS(CARDINAL)")
 
 (defn parse-xprop-frame-extents [ss]
-  (let [frame-extents-line (->> ss
-                                (str/split-lines)
-                                (filter #(or (.startsWith % frame-extents-gtk-prefix)
-                                             (.startsWith % frame-extents-net-prefix)))
-                                (first))
+  (let [frame-extents-lines (->> ss
+                                 (str/split-lines)
+                                 (filter #(or (.startsWith % frame-extents-gtk-prefix)
+                                              (.startsWith % frame-extents-net-prefix))))
+        frame-extents-line (or (some #(and (.startsWith % frame-extents-gtk-prefix) %) frame-extents-lines)
+                               (some #(and (.startsWith % frame-extents-net-prefix) %) frame-extents-lines))
         frame-extents (or (parse-xprop-frame-extents-line frame-extents-line)
                           {:left-extent   0
                            :right-extent  0
@@ -147,27 +148,19 @@
 (defn move-active-window! [{:keys [x y width height] :as _window-dimensions} _frame-extents]
   ; remove maximized flags, otherwise resizing has no effect
   (restore-active-window!)
-  (as->
-    (format "xdotool getactivewindow windowsize %s %s windowmove %s %s" width height x y) $
-    (str/split $ #" ")
-    (apply sh $)))
+  (as-> (format "wmctrl -r :ACTIVE: -e 0,%s,%s,%s,%s" x y width height) $
+        (str/split $ #" ")
+        (apply sh $)))
 
-(defn get-containing-screen [{window-x :x}
+(defn get-containing-screen [{_window-x :x}
                              {monitor-descriptions :monitor-descriptions}]
   ; find which screen the current window's x coordinate lies within.
   ; use found screen to provide screen-width.
   ; assume that iteration order of screens is correct.
   ;   i.e. screen 0 begins at x = 0, screen 1 begins at x = 1 + <WIDTH-OF-SCREEN-0>
-  (->> monitor-descriptions
-       (reduce (fn [acc {width :width :as monitor}]
-                 ; special case - when window-x is negative
-                 (if (and (zero? acc)
-                          (neg? window-x))
-                   (reduced (assoc monitor :x-offset 0))
-                   (if (<= acc window-x (+ acc width))
-                     (reduced (assoc monitor :x-offset acc))
-                     (+ acc width))))
-               0)))
+  (-> monitor-descriptions
+      (first)
+      (assoc :x-offset 0)))
 
 (defn parse-normal-hint-value [hint-value]
   ; examples:
@@ -184,7 +177,6 @@
 (def hint-minimum-size-token "program specified minimum size")
 (def hint-resize-increment-token "program specified resize increment")
 (def hint-base-size-token "program specified base size")
-
 (defn parse-xprop-normal-hints [ss]
   (->> ss
        (str/split-lines)
@@ -273,7 +265,6 @@
   ;     * provides physical screen dimensions
   ;   * wmctrl
   ;     * used to un-maximize
-  ;   * xdotool
   ;     * provides sizing and movement of active window
   ;   * xwininfo
   ;     * provides absolute positioning and measurements of specified window
@@ -282,4 +273,6 @@
   ; optional binaries:
   ;   * xdpyinfo (not used)
   ;     * provides virtual screen dimensions
+  ;   * xdotool (not used)
+  ;     * provides sizing and movement of active window
   )
