@@ -215,7 +215,7 @@
 (defn resize-dimensions [{width  :width
                           height :height
                           :as    dimensions}
-                         {:keys [hint-width hint-height] :as _resize-increments}
+                         {:keys [hint-width _hint-height] :as _resize-increments}
                          {left-extent  :left-extent
                           right-extent :right-extent
                           :as          _frame-dimensions}
@@ -227,7 +227,7 @@
                          (if (> $ total-width)
                            (- $ hint-width)
                            $))
-        next-height (+ (- height (mod height hint-height)) hint-height)
+        next-height height
         next-dimensions (-> dimensions
                             (assoc :width next-width)
                             (assoc :height next-height))]

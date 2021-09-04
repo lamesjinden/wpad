@@ -16,7 +16,7 @@
                 (int (* screen-width ratio)))
         height (if (= extents-type :gtk)
                  (+ top-extent bottom-extent (int workspace-height))
-                 (int workspace-height))
+                 (- (int workspace-height) top-extent bottom-extent))
         x (if (= extents-type :gtk)
             (- 0 left-extent)
             0)
