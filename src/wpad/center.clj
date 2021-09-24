@@ -20,10 +20,10 @@
         desired-height workspace-height
         width (+ desired-width horizontal-extents)
         height (+ desired-height vertical-extents)
-        x (-> screen-width
-              (- width)
-              (+ workspace-x)
-              (/ 2))
+        x (int (-> screen-width
+                   (- width)
+                   (+ workspace-x)
+                   (/ 2)))
         y 0]
     {:x      x
      :y      y
@@ -38,12 +38,48 @@
     (->> sizing-ratios
          (map #(get-placements-by-rate % containing-screen environment)))))
 
-(defn -main []
+(defn get-center-placement-option
+  [{{workspace-x :x
+     workspace-y :y
+     :as         _workspace-dimensions}                    :workspace
+    {{_window-x     :x
+      _window-y     :y
+      window-width  :width
+      window-height :height
+      :as           active-window-dimensions} :dimensions} :window
+    screens-dimensions                                     :monitors
+    :as                                                    _environment}]
+  (let [{screen-width  :width
+         screen-height :height
+         :as           _containing-screen}
+        (w/get-containing-screen active-window-dimensions screens-dimensions)
+        x (int (-> screen-width
+                   (- window-width)
+                   (+ workspace-x)
+                   (/ 2)))
+        y (int (-> screen-height
+                   (- window-height)
+                   (+ workspace-y)
+                   (/ 2)))]
+    {:x      x
+     :y      y
+     :width  window-width
+     :height window-height}))
+
+(def switch-center-only "--center-only")
+
+(defn -main [& args]
   (w/log "")
   (try
     (let [environment (w/get-environment)
-          placement-options (get-placement-options environment)]
-      (w/move-next! environment placement-options))
+          center-only? (as-> (or args #{}) $
+                             (into #{} $)
+                             (contains? $ switch-center-only))]
+      (if center-only?
+        (let [center-placement (get-center-placement-option environment)]
+          (w/move-active-window! center-placement (:frame-extents environment)))
+        (let [placement-options (get-placement-options environment)]
+          (w/move-next! environment placement-options))))
     (catch Exception e
       (w/log e))))
 

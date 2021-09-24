@@ -148,6 +148,7 @@
 (defn move-active-window! [{:keys [x y width height] :as _window-dimensions} _frame-extents]
   ; remove maximized flags, otherwise resizing has no effect
   (restore-active-window!)
+  (log (format "x: %s; y: %s; width: %s; height: %s" x y width height))
   (as-> (format "wmctrl -r :ACTIVE: -e 0,%s,%s,%s,%s" x y width height) $
         (str/split $ #" ")
         (apply sh $)))
