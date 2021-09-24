@@ -20,10 +20,10 @@
         desired-height (int (/ workspace-height 2))
         width (+ desired-width horizontal-extents)
         height (+ desired-height vertical-extents)
-        x (-> screen-width
-              (- width)
-              (+ workspace-x)
-              (/ 2))
+        x (int (-> screen-width
+                   (- width)
+                   (+ workspace-x)
+                   (/ 2)))
         y 0]
     {:x      x
      :y      y
