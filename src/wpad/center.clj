@@ -36,14 +36,16 @@
 (defn get-center-placement-option
   [{{workspace-x :x
      workspace-y :y
-     :as         _workspace-dimensions}                    :workspace
+     :as         _workspace-dimensions}                       :workspace
     {{_window-x     :x
       _window-y     :y
       window-width  :width
       window-height :height
-      :as           active-window-dimensions} :dimensions} :window
-    screens-dimensions                                     :monitors
-    :as                                                    _environment}]
+      :as           active-window-dimensions} :dimensions
+     {:keys [top-extent]
+      :as   _frame-dimensions}                :frame-extents} :window
+    screens-dimensions                                        :monitors
+    :as                                                       _environment}]
   (let [{screen-width  :width
          screen-height :height
          :as           _containing-screen}
@@ -55,7 +57,8 @@
         y (int (-> screen-height
                    (- window-height)
                    (+ workspace-y)
-                   (/ 2)))]
+                   (/ 2)
+                   (- top-extent)))]
     {:x      x
      :y      y
      :width  window-width
