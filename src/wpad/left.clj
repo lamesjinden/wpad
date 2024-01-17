@@ -1,7 +1,7 @@
 (ns wpad.left
   (:require [wpad.core :as w]))
 
-(def sizing-ratios [0.15 0.25 0.33 0.5 0.66 0.75 0.85 1.0])
+(def sizing-ratios [0.05 0.15 0.25 0.33 0.5 0.66 0.75 0.85 0.95 1.0])
 
 (defn get-placements-by-rate
   [ratio

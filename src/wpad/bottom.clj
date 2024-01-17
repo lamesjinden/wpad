@@ -8,6 +8,7 @@
    {screen-width :width
     :as          _containing-screen}
    {{workspace-height :height
+     workspace-y :y
      :as              _workspace-dimensions}   :workspace
     {{:keys [left-extent right-extent top-extent bottom-extent extents-type]
       :as   _frame-dimensions} :frame-extents} :window
@@ -21,7 +22,7 @@
         x (int (/ (- screen-width width) 2))
         y (if (= extents-type :gtk)
             (int (/ workspace-height 2))
-            (- (+ top-extent (int (/ workspace-height 2))) bottom-extent))]
+            (+ workspace-y (int (/ workspace-height 2))))]
     {:x      x
      :y      y
      :width  width
@@ -46,6 +47,4 @@
 
 (comment
 
-  (-main)
-
-  )
+  (-main))
